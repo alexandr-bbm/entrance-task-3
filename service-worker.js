@@ -4,10 +4,9 @@
  * Сервис-воркер, обеспечивающий оффлайновую работу избранного
  */
 
-const CACHE_VERSION = '1.0.0-broken';
+const CACHE_VERSION = '1.1.0';
 
-importScripts('../vendor/kv-keeper.js-1.0.4/kv-keeper.js');
-
+importScripts('./vendor/kv-keeper.js-1.0.4/kv-keeper.js');
 
 self.addEventListener('install', event => {
     const promise = preCacheAllFavorites()
@@ -34,12 +33,13 @@ self.addEventListener('fetch', event => {
     const url = new URL(event.request.url);
 
     // Вопрос №3: для всех ли случаев подойдёт такое построение ключа?
-    const cacheKey = url.origin + url.pathname;
+    const cacheKey = url.origin + url.pathname + url.search;
+    const isRoot = url.pathname === '/' && url.search === '';
 
     let response;
-    if (needStoreForOffline(cacheKey)) {
-        response = caches.match(cacheKey)
-            .then(cacheResponse => cacheResponse || fetchAndPutToCache(cacheKey, event.request));
+    if (needStoreForOffline(cacheKey, isRoot)) {
+
+        response = fetchAndPutToCacheWithFallbackToCache(cacheKey, event.request);
     } else {
         response = fetchWithFallbackToCache(event.request);
     }
@@ -124,14 +124,15 @@ function deleteObsoleteCaches() {
 }
 
 // Нужно ли при скачивании сохранять ресурс для оффлайна?
-function needStoreForOffline(cacheKey) {
+function needStoreForOffline(cacheKey, isRoot) {
     return cacheKey.includes('vendor/') ||
         cacheKey.includes('assets/') ||
-        cacheKey.endsWith('jquery.min.js');
+        cacheKey.endsWith('jquery.min.js') ||
+        isRoot;
 }
 
 // Скачать и добавить в кеш
-function fetchAndPutToCache(cacheKey, request) {
+function fetchAndPutToCacheWithFallbackToCache(cacheKey, request) {
     return fetch(request)
         .then(response => {
             return caches.open(CACHE_VERSION)
